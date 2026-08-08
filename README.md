@@ -106,6 +106,40 @@ node dist/cli.js ./path/to/project --fail-on high
 If you `npm link` (or install it globally), the same commands are available
 via the `build-scanner` binary instead of `node dist/cli.js`.
 
+## Example scan results
+
+Running the scanner against a file with an interpolated SQL query:
+
+```
+$ build-scanner tests/fixtures/sql-injection.vuln.js
+
+build-scanner: 1 files scanned in 9ms
+
+ HIGH  SQL Injection — SQL query built from a template literal with interpolated values — likely SQL injection.
+  sql-injection.vuln.js:2:19
+  │ return db.query(`SELECT * FROM users WHERE id = ${userId}`);
+  fix: Use a parameterized query / prepared statement (e.g. `db.query('... WHERE id = ?', [id])`) instead of interpolating values into the SQL string.
+
+Total: 1 (critical: 0, high: 1, medium: 0, low: 0, info: 0)
+```
+
+`--format json` produces the same findings as a single serialized `ScanResult`
+object instead (see the Programmatic API table below for its shape) — this is
+the form to use when a downstream step or dashboard needs to parse results.
+
+### Exit-code behavior
+
+| Scenario | Exit code |
+|---|---|
+| Scan completes, `--fail-on` not passed | `0`, regardless of findings |
+| Scan completes, no finding at/above `--fail-on` severity | `0` |
+| Scan completes, a finding at/above `--fail-on` severity exists | `1` |
+| Invalid `--fail-on` value | `2`, error printed to stderr, no scan runs |
+
+Only `--fail-on` makes the process exit non-zero on findings — without it,
+build-scanner reports and exits `0` even when it finds critical issues, so CI
+gating is opt-in via that flag (or the Action's `fail-on` input).
+
 ## Input / Output reference
 
 ### CLI
@@ -145,22 +179,75 @@ Each `Finding` in `ScanResult.findings` is `{ ruleId, category, severity, messag
 
 ## Use as a GitHub Action
 
-Once this repo is pushed to GitHub and tagged (e.g. `v1`), any other repo can
-run the scanner in CI without installing anything itself:
+Any other repo can run the scanner in CI without installing anything itself:
 
 ```yaml
-- uses: actions/checkout@v7
-- uses: laxmipsarva/build-scanner@v1
-  with:
-    path: .
-    fail-on: high
+name: Security scan
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Secure Build Scanner
+        uses: laxmipsarva/secure-build-scanner@v1.0
+        with:
+          path: .
+          fail-on: high
 ```
+
+### Required permissions
+
+The scan step itself only reads the checked-out source, so `contents: read`
+is sufficient. It doesn't open PRs, write check annotations, or call the
+GitHub API, so no other permission scopes are needed unless a later step in
+your job requires them.
 
 Inputs mirror the CLI flags above: `path` (default `.`), `format` (`text` |
 `json`, default `text`), `rules` (comma-separated rule IDs), `fail-on`
 (`critical|high|medium|low|info`), and `list-files` (`true`/`false`). The
-action installs its own dependencies and builds from source on each run, so
-the job fails exactly the way a local `--fail-on` run would.
+action has no `outputs:` — results are only available via the job log and
+the step's exit code (see [Exit-code behavior](#exit-code-behavior) above).
+The action installs its own dependencies and builds from source on each run,
+so the job fails exactly the way a local `--fail-on` run would.
 
-Note: the `@v1` tag doesn't exist yet — until a release is tagged, reference
-the action by branch or commit SHA (e.g. `laxmipsarva/build-scanner@main`).
+## Supported operating systems
+
+The Action runs the scanner under Node.js via `actions/setup-node`, so it
+works on any GitHub-hosted or self-hosted runner with a POSIX shell —
+`ubuntu-*` and `macos-*` runners are supported and tested against
+`ubuntu-latest` in this repo's own CI. `windows-*` runners are not currently
+tested; the `bash`-scripted steps in `action.yml` require a `bash` shell to
+be available (present by default via Git Bash on `windows-latest`, but
+unverified here). The CLI itself (`node dist/cli.js`) is pure Node.js/`fs`
+and has no OS-specific dependencies.
+
+## Version and release policy
+
+Releases are tagged on the `main` branch, which always contains the current
+implementation. Point releases (`0.1.0`, `0.1.1`, ...) are tagged as work
+lands; `package.json` is the source of truth for the current version number.
+The current release is `v1.0`. A rolling major-version tag (e.g. `@v1`) that
+automatically tracks the latest `v1.x` release is planned but not yet
+published — until then, pin to an exact tag (as in the example above) or a
+commit SHA rather than `main`, since `main` can change without notice.
+
+## Development
+
+```bash
+npm test        # run the test suite (vitest)
+npm run typecheck
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -1,5 +1,11 @@
-name: 'build-scanner'
-description: 'Static scanner for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF vulnerabilities in a source folder'
+name: 'Secure Build Scanner'
+description: >-
+  Scan source code for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF
+  vulnerabilities directly in CI/CD. A fast, zero-config static security
+  scanner and build security gate for Node/Express, Next.js, and Vite/CRA
+  projects.
+author: 'Laxmi Sarva'
+
 branding:
   icon: 'shield'
   color: 'red'
@@ -10,19 +16,19 @@ inputs:
     required: false
     default: '.'
   format:
-    description: 'Output format: text | json'
+    description: 'Output format written to the job log: text | json'
     required: false
     default: 'text'
   rules:
-    description: 'Comma-separated rule IDs to run (default: all)'
+    description: 'Comma-separated rule IDs to run. Run the CLI `rules` subcommand, or see README.md, for the full list. Empty runs all rules.'
     required: false
     default: ''
   fail-on:
-    description: 'Exit non-zero if a finding at or above this severity is present (critical|high|medium|low|info)'
+    description: 'Minimum severity that fails the step: critical | high | medium | low | info. Empty means the step never fails on findings.'
     required: false
     default: ''
   list-files:
-    description: 'List every file that was scanned'
+    description: 'When "true", append the full list of scanned files to the text-format report'
     required: false
     default: 'false'
 
