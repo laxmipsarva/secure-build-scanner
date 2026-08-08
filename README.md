@@ -28,8 +28,7 @@ seconds, before they reach a PR review or production:
 It flags these patterns:
 
 - **SQL Injection** — string-concatenated or template-literal SQL queries,
-  raw DB errors leaked to the client, and denylist-style SQLi filters (see
-  [SQL injection scenario coverage](#sql-injection-scenario-coverage) below)
+  raw DB errors leaked to the client, and denylist-style SQLi filters
 - **NoSQL Injection** — raw request objects passed into MongoDB-style
   queries (operator injection), and `$where` clauses built from dynamic
   strings (JS injection)
@@ -41,6 +40,11 @@ It flags these patterns:
   disabled entirely
 - **CSRF** — state-changing routes with no CSRF protection referenced,
   cookies set with `SameSite=None`
+- **API** — exposed Swagger/OpenAPI docs UIs, deprecated endpoints left
+  mounted, mass assignment (`req.body` passed straight into
+  `create`/`save`/`update`/`assign` calls), and unsanitized `req.query`/
+  `req.params` spliced into outbound backend request URLs (server-side
+  parameter pollution)
 
 This is a heuristic, regex-based static scanner intended to catch common
 mistakes quickly — it is not a substitute for a full SAST/DAST tool or a
@@ -145,12 +149,11 @@ Each `Finding` in `ScanResult.findings` is `{ ruleId, category, severity, messag
 
 ## Use as a GitHub Action
 
-Once this repo is pushed to GitHub and tagged (e.g. `v1`), any other repo can
-run the scanner in CI without installing anything itself:
+Any other repo can run the scanner in CI without installing anything itself:
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: laxmipsarva/build-scanner@v1
+- uses: laxmipsarva/secure-build-scanner@v1
   with:
     path: .
     fail-on: high
@@ -162,5 +165,16 @@ Inputs mirror the CLI flags above: `path` (default `.`), `format` (`text` |
 action installs its own dependencies and builds from source on each run, so
 the job fails exactly the way a local `--fail-on` run would.
 
-Note: the `@v1` tag doesn't exist yet — until a release is tagged, reference
-the action by branch or commit SHA (e.g. `laxmipsarva/build-scanner@main`).
+`@v1` tracks the latest `v1.x` release (currently `v1.0`); pin to an exact
+tag (e.g. `@v1.0`) or a commit SHA if you want the version fixed.
+
+## Development
+
+```bash
+npm test        # run the test suite (vitest)
+npm run typecheck
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
