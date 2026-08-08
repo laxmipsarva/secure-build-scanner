@@ -1,9 +1,7 @@
 name: 'Secure Build Scanner'
 description: >-
   Scan source code for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF
-  vulnerabilities directly in CI/CD. A fast, zero-config static security
-  scanner and build security gate for Node/Express, Next.js, and Vite/CRA
-  projects.
+  vulnerabilities directly in CI/CD.
 author: 'Laxmi Sarva'
 
 branding:
