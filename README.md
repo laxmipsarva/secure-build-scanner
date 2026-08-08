@@ -1,4 +1,4 @@
-# build-scanner
+# secure-build-scanner
 
 Modern web apps ship through build pipelines, bundlers, and CI/CD
 systems fast enough that the most common, highest-impact vulnerability
