@@ -1,4 +1,4 @@
-name: 'build-scanner'
+name: 'secure-build-scanner'
 description: 'Static scanner for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF vulnerabilities in a source folder'
 branding:
   icon: 'shield'
