@@ -6,6 +6,8 @@ import cors from "./cors.js";
 import csp from "./csp.js";
 import csrf from "./csrf.js";
 import apiVulnerabilities from "./api-vulnerabilities.js";
+import botHandling from "./bot-handling.js";
+import userAgent from "./user-agent.js";
 
 export const allRules: Rule[] = [
   sqlInjection,
@@ -15,4 +17,6 @@ export const allRules: Rule[] = [
   csp,
   csrf,
   apiVulnerabilities,
+  botHandling,
+  userAgent,
 ];

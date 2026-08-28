@@ -14,6 +14,7 @@ const DEFAULT_INCLUDE = [
   "**/*.gql",
   "**/*.json",
   "**/*.html",
+  "**/robots.txt",
 ];
 
 const DEFAULT_EXCLUDE = [

@@ -41,6 +41,15 @@ It flags these patterns:
   disabled entirely
 - **CSRF** — state-changing routes with no CSRF protection referenced,
   cookies set with `SameSite=None`
+- **Bot Handling** — sensitive/abuse-prone routes (login, signup, password
+  reset, checkout, contact forms) with no rate-limiting or CAPTCHA
+  referenced, error handlers that leak `err.stack` to the client, and
+  `robots.txt` entries that disclose sensitive paths (e.g. `/admin`) via
+  `Disallow`
+- **User-Agent Security** — security decisions (auth/rate-limit bypass) based
+  on a spoofable User-Agent header value (CWE-807), and sensitive routes with
+  no User-Agent-based filtering of known malicious scanner/bot signatures at
+  all
 
 This is a heuristic, regex-based static scanner intended to catch common
 mistakes quickly — it is not a substitute for a full SAST/DAST tool or a
@@ -48,7 +57,8 @@ manual security review, and it can produce false positives/negatives.
 
 ### Vite/CRA and Next.js coverage
 
-Beyond Express-style server code, the CSP/CORS/CSRF rules also recognize:
+Beyond Express-style server code, the CSP/CORS/CSRF/Bot Handling rules also
+recognize:
 
 - **Vite/CRA**: a `<meta http-equiv="Content-Security-Policy" content="...">`
   tag in `index.html` (attribute order doesn't matter).
@@ -66,13 +76,24 @@ Beyond Express-style server code, the CSP/CORS/CSRF rules also recognize:
   containing the `"use server"` directive (Server Actions) are treated as
   already protected, since Next.js applies automatic Origin-header CSRF
   protection to them.
+- **Next.js Bot Handling**: the same App Router Route Handler and Pages API
+  detection as CSRF, filtered to routes whose path looks sensitive
+  (login, signup, password reset, checkout, contact, etc.).
+- **Next.js User-Agent Security**: the same App Router Route Handler and
+  Pages API sensitive-route detection as Bot Handling, checked for the
+  absence of any User-Agent-based filtering.
 
 Known limitations: CSP/CORS values built through multi-step indirection
 (`.join()`, `.replace()`, imports from another file) aren't resolved — only a
 single `const`/`let`/`var` string or template-literal assignment in the same
 file is. Generic `request.method === 'POST'` branching outside `pages/api/`
 (e.g. in `middleware.ts`) isn't flagged, since that shape is too common in
-unrelated auth/redirect logic to scope safely.
+unrelated auth/redirect logic to scope safely. Bot Handling's rate-limit/CAPTCHA
+check is a same-file heuristic like CSRF's — rate-limiting applied globally in
+a separate middleware-setup file rather than per-route isn't seen. User-Agent
+Security's bad-bot-filtering check is the same kind of same-file heuristic, and
+User-Agent filtering is itself a weak, easily-spoofed control — that finding is
+defense-in-depth advice, not a fix on its own.
 
 ## Install
 
