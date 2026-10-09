@@ -17,3 +17,17 @@ jobs:
         with:
           path: tests/fixtures
           format: json
+
+      - name: Run build-scanner with SARIF output
+        id: sarif
+        uses: ./
+        with:
+          path: tests/fixtures
+          format: sarif
+          upload-sarif: 'false'
+
+      - name: Check SARIF report
+        shell: bash
+        env:
+          SARIF_FILE: ${{ steps.sarif.outputs.sarif-file }}
+        run: node -e 'const s = JSON.parse(require("fs").readFileSync(process.env.SARIF_FILE, "utf8")); if (s.version !== "2.1.0" || s.runs[0].results.length === 0) process.exit(1)'
