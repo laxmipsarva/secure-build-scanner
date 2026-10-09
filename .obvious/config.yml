@@ -1,0 +1,6 @@
+# Repo policy for obvious automation — auto-detected from GitHub settings on 2026-10-09.
+# GitHub allows merge commit, squash, and rebase; repo history uses merge commits
+# ("Merge pull request #N"), so merge is the detected method.
+branches:
+  default: main
+mergeMethod: merge
