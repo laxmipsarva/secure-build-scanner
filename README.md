@@ -241,7 +241,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Secure Build Scanner
-        uses: laxmipsarva/secure-build-scanner@v1.0
+        uses: laxmipsarva/secure-build-scanner@v1.1.1
         with:
           path: .
           fail-on: high
@@ -263,7 +263,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Secure Build Scanner
-        uses: laxmipsarva/secure-build-scanner@v1.0
+        uses: laxmipsarva/secure-build-scanner@v1.1.1
         with:
           path: .
           format: sarif
@@ -306,9 +306,9 @@ and has no OS-specific dependencies.
 ## Version and release policy
 
 Releases are tagged on the `main` branch, which always contains the current
-implementation. Point releases (`0.1.0`, `0.1.1`, ...) are tagged as work
+implementation. Point releases (`v1.1`, `v1.1.1`, ...) are tagged as work
 lands; `package.json` is the source of truth for the current version number.
-The current release is `v1.0`. A rolling major-version tag (e.g. `@v1`) that
+The current release is `v1.1.1`. A rolling major-version tag (e.g. `@v1`) that
 automatically tracks the latest `v1.x` release is planned but not yet
 published — until then, pin to an exact tag (as in the example above) or a
 commit SHA rather than `main`, since `main` can change without notice.
