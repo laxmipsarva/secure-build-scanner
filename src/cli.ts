@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
+import { statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { Command } from "commander";
 import { scan } from "./core/scanner.js";
-import { formatJson, formatText } from "./core/report.js";
+import { formatJson, formatSarif, formatText } from "./core/report.js";
 import { allRules } from "./rules/index.js";
 
 const program = new Command();
@@ -10,10 +11,10 @@ const program = new Command();
 program
   .name("build-scanner")
   .description(
-    "Static scanner for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF vulnerabilities in a local build/source folder",
+    "Zero-config static scanner for missing security controls (rate limiting, CAPTCHA, CSRF, bot filtering) and injection, CORS, CSP, GraphQL, and API flaws in Express, Next.js, and Vite apps",
   )
   .argument("[path]", "directory to scan", ".")
-  .option("-f, --format <format>", "output format: text | json", "text")
+  .option("-f, --format <format>", "output format: text | json | sarif", "text")
   .option("-r, --rules <ids>", "comma-separated rule IDs to run (default: all)")
   .option(
     "--fail-on <severity>",
@@ -38,6 +39,11 @@ program
 
     if (opts.format === "json") {
       console.log(formatJson(result));
+    } else if (opts.format === "sarif") {
+      // Finding paths are relative to the scanned directory (or a single file's parent);
+      // SARIF URIs are written relative to the cwd so they line up with a CI checkout.
+      const sourceRoot = statSync(root).isFile() ? dirname(root) : root;
+      console.log(formatSarif(result, allRules, { sourceRoot, baseDir: process.cwd() }));
     } else {
       console.log(formatText(result, { listFiles: opts.listFiles }));
     }

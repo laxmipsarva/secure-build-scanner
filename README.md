@@ -1,46 +1,34 @@
 # build-scanner
 
-Modern web apps ship through build pipelines, bundlers, and CI/CD
-systems fast enough that the most common, highest-impact vulnerability
-classes — SQL/NoSQL injection, permissive CORS, weak CSP, missing CSRF
-protection — routinely slip through because catching them requires someone
-to actually read the source. build-scanner finds them automatically, in
-seconds, before they reach a PR review or production:
+Most static scanners look for dangerous code that is present. build-scanner
+also flags the protections that are **missing**: login, signup, and checkout
+routes with no rate limiting or CAPTCHA, state-changing routes with no CSRF
+defense, security decisions trusted to a spoofable User-Agent header, error
+handlers that leak stack traces, and `robots.txt` files that point bots
+straight at `/admin`. It covers the classic vulnerability classes too —
+SQL/NoSQL injection, permissive CORS, weak CSP, GraphQL and API
+misconfigurations — and finds them in seconds, before they reach a PR review
+or production:
 
-- **Shift-left, not bolt-on.** Runs as a CLI locally or as a GitHub Action
-  in CI, so findings surface before merge instead of during an incident.
-- **Zero setup, zero infrastructure.** Pure static source scan — no sandbox,
-  no live target, no API keys, no service to stand up. Point it at a folder
-  and get a report in seconds.
-- **CI-native output.** Human-readable text, JSON for tooling/dashboards,
-  and a `--fail-on` severity gate so a pipeline can hard-fail on real risk
-  without wiring up a full SAST platform.
+- **Missing-control checks, not just bad patterns.** The Bot Handling,
+  User-Agent Security, and CSRF rules flag sensitive routes that lack a
+  defense — the kind of gap pattern-matching SAST tools rarely report.
 - **Framework-aware, not just a regex sweep.** Dedicated rules for
   Express-style servers, Next.js (App Router, Pages API, Server Actions,
   `middleware.ts`), and Vite/CRA — see the coverage tables below for exactly
   what's recognized in each.
-- **Honest about what it is.** A fast, heuristic first pass that flags the
-  code patterns behind classic vulnerabilities — unparameterized queries,
-  wildcard/reflected CORS, `unsafe-inline`/`unsafe-eval` CSP, unprotected
-  state-changing routes — meant to complement, not replace, full SAST/DAST
-  tooling and manual security review.
+- **Zero setup, zero infrastructure.** Pure static source scan — no sandbox,
+  no live target, no API keys, no account, no ruleset to choose. Point it at
+  a folder and get a report in seconds.
+- **CI-native output.** Human-readable text, JSON for tooling/dashboards,
+  SARIF for GitHub Code Scanning, and a `--fail-on` severity gate so a
+  pipeline can hard-fail on real risk without wiring up a full SAST platform.
+- **Honest about what it is.** A fast, heuristic first pass meant to run
+  alongside, not replace, semantic SAST (CodeQL, Semgrep, Snyk Code), DAST,
+  and manual security review.
 
-It flags these patterns:
+It flags these missing controls:
 
-- **SQL Injection** — string-concatenated or template-literal SQL queries,
-  raw DB errors leaked to the client, and denylist-style SQLi filters (see
-  [SQL injection scenario coverage](#sql-injection-scenario-coverage) below)
-- **NoSQL Injection** — raw request objects passed into MongoDB-style
-  queries (operator injection), and `$where` clauses built from dynamic
-  strings (JS injection)
-- **GraphQL** — introspection left enabled, missing query depth/complexity
-  limiting, resolver arguments piped into `exec`/`eval`
-- **CORS** — wildcard or reflected `Access-Control-Allow-Origin`, wildcard
-  origin combined with credentials
-- **CSP** — `unsafe-inline`/`unsafe-eval`, wildcard directive sources, CSP
-  disabled entirely
-- **CSRF** — state-changing routes with no CSRF protection referenced,
-  cookies set with `SameSite=None`
 - **Bot Handling** — sensitive/abuse-prone routes (login, signup, password
   reset, checkout, contact forms) with no rate-limiting or CAPTCHA
   referenced, error handlers that leak `err.stack` to the client, and
@@ -50,6 +38,26 @@ It flags these patterns:
   on a spoofable User-Agent header value (CWE-807), and sensitive routes with
   no User-Agent-based filtering of known malicious scanner/bot signatures at
   all
+- **CSRF** — state-changing routes with no CSRF protection referenced,
+  cookies set with `SameSite=None`
+
+And these vulnerable patterns:
+
+- **SQL Injection** — string-concatenated or template-literal SQL queries,
+  raw DB errors leaked to the client, and denylist-style SQLi filters
+- **NoSQL Injection** — raw request objects passed into MongoDB-style
+  queries (operator injection), and `$where` clauses built from dynamic
+  strings (JS injection)
+- **GraphQL** — introspection left enabled, missing query depth/complexity
+  limiting, resolver arguments piped into `exec`/`eval`
+- **CORS** — wildcard or reflected `Access-Control-Allow-Origin`, wildcard
+  origin combined with credentials
+- **CSP** — `unsafe-inline`/`unsafe-eval`, wildcard directive sources, CSP
+  disabled entirely
+- **API** — exposed API documentation UIs, deprecated/legacy endpoints left
+  mounted, mass-assignment sinks (raw `req.body` into create/update/assign),
+  and unsanitized request values spliced into outbound backend request URLs
+  (server-side parameter pollution)
 
 This is a heuristic, regex-based static scanner intended to catch common
 mistakes quickly — it is not a substitute for a full SAST/DAST tool or a
@@ -114,6 +122,9 @@ node dist/cli.js ./path/to/project/server.js
 # JSON output (for CI / tooling)
 node dist/cli.js ./path/to/project --format json
 
+# SARIF output (for GitHub Code Scanning or any SARIF viewer)
+node dist/cli.js ./path/to/project --format sarif > build-scanner.sarif
+
 # Run only specific rules
 node dist/cli.js ./path/to/project --rules sql-injection,csrf-vulnerabilities
 
@@ -148,6 +159,13 @@ Total: 1 (critical: 0, high: 1, medium: 0, low: 0, info: 0)
 object instead (see the Programmatic API table below for its shape) — this is
 the form to use when a downstream step or dashboard needs to parse results.
 
+`--format sarif` writes a SARIF 2.1.0 log instead. File paths in it are
+relative to the current directory, so run it from the repo root to have
+GitHub Code Scanning map findings onto your source. Each finding's level is
+`error` (critical/high), `warning` (medium), or `note` (low/info). Each rule
+gets a `security-severity` score from its most severe finding in the run,
+which GitHub uses to show it as Critical, High, Medium, or Low.
+
 ### Exit-code behavior
 
 | Scenario | Exit code |
@@ -168,7 +186,7 @@ gating is opt-in via that flag (or the Action's `fail-on` input).
 | Input | Values | Output / behavior |
 |---|---|---|
 | `<path>` (positional, default `.`) | directory or file path | Scans that directory (recursively) or single file |
-| `-f, --format <format>` | `text` (default) \| `json` | `text`: human-readable report on stdout. `json`: the full `ScanResult` object serialized to stdout |
+| `-f, --format <format>` | `text` (default) \| `json` \| `sarif` | `text`: human-readable report on stdout. `json`: the full `ScanResult` object serialized to stdout. `sarif`: a SARIF 2.1.0 log on stdout, with paths relative to the current directory |
 | `-r, --rules <ids>` | comma-separated rule IDs | Only the listed rules run; an unknown id prints a warning to stderr and contributes no findings |
 | `--fail-on <severity>` | `critical`\|`high`\|`medium`\|`low`\|`info` | Report is printed as usual; process exit code is `1` if any finding at or above that severity exists, `0` otherwise. An invalid value prints an error to stderr and exits `2` |
 | `-l, --list-files` | flag | Text format only: appends the full list of scanned files to the report |
@@ -180,12 +198,14 @@ gating is opt-in via that flag (or the Action's `fail-on` input).
 | Input | Default | Output / behavior |
 |---|---|---|
 | `path` | `.` | Directory or file scanned, relative to the caller repo checkout |
-| `format` | `text` | `text` or `json` report written to the job log |
+| `format` | `text` | `text` or `json` report written to the job log, or `sarif` written to `sarif-file` |
+| `sarif-file` | `build-scanner.sarif` | Where the SARIF report is written when `format` is `sarif`, relative to the workspace |
+| `upload-sarif` | `true` | When `format` is `sarif`, upload the report to GitHub Code Scanning (needs `security-events: write`) |
 | `rules` | `''` (all rules) | Comma-separated rule IDs to run |
 | `fail-on` | `''` (never fails) | Step fails (non-zero exit) if a finding at or above this severity is present |
 | `list-files` | `false` | `true` appends the scanned-file list to the log (text format only) |
 
-The action has no `outputs:` — results are only available via the job log and the step's exit code, not as a downstream-consumable output variable.
+The action has one output, `sarif-file`: the path to the SARIF report, set only when `format` is `sarif`. Otherwise results are only available via the job log and the step's exit code.
 
 ### Programmatic API
 
@@ -194,6 +214,7 @@ The action has no `outputs:` — results are only available via the job log and 
 | `scan(options, rules)` | `options: { root, include?, exclude?, ruleIds? }`, `rules: Rule[]` (e.g. `allRules`) | `Promise<ScanResult>` — `{ root, filesScanned, scannedFiles, findings, durationMs }` |
 | `formatText(result, opts?)` | `result: ScanResult`, `opts?: { listFiles?: boolean }` | `string` — human-readable report |
 | `formatJson(result)` | `result: ScanResult` | `string` — JSON-serialized `ScanResult` |
+| `formatSarif(result, rules, opts?)` | `result: ScanResult`, `rules: Rule[]`, `opts?: { sourceRoot?, baseDir? }` | `string` — SARIF 2.1.0 log; URIs are relative to `baseDir` (default: `sourceRoot`, which defaults to `result.root`) |
 | `allRules` | — | `Rule[]` — every registered rule |
 
 Each `Finding` in `ScanResult.findings` is `{ ruleId, category, severity, message, file, line, column?, snippet, recommendation }` (see `src/core/types.ts`).
@@ -226,18 +247,48 @@ jobs:
           fail-on: high
 ```
 
+To see findings in the repo's **Security → Code scanning** tab, next to
+CodeQL's, use SARIF output. The action uploads the report for you:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Secure Build Scanner
+        uses: laxmipsarva/secure-build-scanner@v1.0
+        with:
+          path: .
+          format: sarif
+          fail-on: high
+```
+
+With `fail-on` set, the report is still uploaded before the step fails, so
+the alerts that tripped the gate show up in Code Scanning. Set
+`upload-sarif: false` to only write the file (exposed as the `sarif-file`
+output) and handle it yourself.
+
 ### Required permissions
 
-The scan step itself only reads the checked-out source, so `contents: read`
-is sufficient. It doesn't open PRs, write check annotations, or call the
-GitHub API, so no other permission scopes are needed unless a later step in
-your job requires them.
+With `text` or `json` output, the scan only reads the checked-out source, so
+`contents: read` is sufficient. With `format: sarif` and the default
+`upload-sarif: true`, the job also needs `security-events: write`. Private
+repositories also need `actions: read` and GitHub Code Scanning enabled
+(part of GitHub Advanced Security).
 
 Inputs mirror the CLI flags above: `path` (default `.`), `format` (`text` |
 `json`, default `text`), `rules` (comma-separated rule IDs), `fail-on`
-(`critical|high|medium|low|info`), and `list-files` (`true`/`false`). The
-action has no `outputs:` — results are only available via the job log and
-the step's exit code (see [Exit-code behavior](#exit-code-behavior) above).
+(`critical|high|medium|low|info`), and `list-files` (`true`/`false`), plus
+the action-only `sarif-file` and `upload-sarif`. Apart from the `sarif-file`
+output, results are only available via the job log and the step's exit code
+(see [Exit-code behavior](#exit-code-behavior) above).
 The action installs its own dependencies and builds from source on each run,
 so the job fails exactly the way a local `--fail-on` run would.
 

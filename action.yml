@@ -1,7 +1,8 @@
 name: 'Secure Build Scanner'
 description: >-
-  Scan source code for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF
-  vulnerabilities directly in CI/CD.
+  Flag missing security controls (rate limiting, CAPTCHA, CSRF, bot
+  filtering) and injection, CORS, CSP, GraphQL, and API flaws in Express and
+  Next.js code. Zero config, no API keys.
 author: 'Laxmi Sarva'
 
 branding:
@@ -14,9 +15,17 @@ inputs:
     required: false
     default: '.'
   format:
-    description: 'Output format written to the job log: text | json'
+    description: 'Output format: text | json (written to the job log) | sarif (written to sarif-file)'
     required: false
     default: 'text'
+  sarif-file:
+    description: 'Where to write the report when format is sarif, relative to the workspace'
+    required: false
+    default: 'build-scanner.sarif'
+  upload-sarif:
+    description: 'When format is sarif and this is "true", upload the report to GitHub Code Scanning (needs security-events: write)'
+    required: false
+    default: 'true'
   rules:
     description: 'Comma-separated rule IDs to run. Run the CLI `rules` subcommand, or see README.md, for the full list. Empty runs all rules.'
     required: false
@@ -29,6 +38,11 @@ inputs:
     description: 'When "true", append the full list of scanned files to the text-format report'
     required: false
     default: 'false'
+
+outputs:
+  sarif-file:
+    description: 'Path to the SARIF report (set only when format is sarif)'
+    value: ${{ steps.scan.outputs.sarif-file }}
 
 runs:
   using: 'composite'
@@ -56,20 +70,53 @@ runs:
       run: npm run build
 
     - name: Run scan
+      id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SCAN_FORMAT: ${{ inputs.format }}
+        SCAN_RULES: ${{ inputs.rules }}
+        SCAN_FAIL_ON: ${{ inputs.fail-on }}
+        SCAN_LIST_FILES: ${{ inputs.list-files }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
       run: |
-        args=("${{ inputs.path }}" --format "${{ inputs.format }}")
+        args=("$SCAN_PATH" --format "$SCAN_FORMAT")
 
-        if [ -n "${{ inputs.rules }}" ]; then
-          args+=(--rules "${{ inputs.rules }}")
+        if [ -n "$SCAN_RULES" ]; then
+          args+=(--rules "$SCAN_RULES")
         fi
 
-        if [ -n "${{ inputs.fail-on }}" ]; then
-          args+=(--fail-on "${{ inputs.fail-on }}")
+        if [ -n "$SCAN_FAIL_ON" ]; then
+          args+=(--fail-on "$SCAN_FAIL_ON")
         fi
 
-        if [ "${{ inputs.list-files }}" = "true" ]; then
+        if [ "$SCAN_LIST_FILES" = "true" ]; then
           args+=(--list-files)
         fi
 
-        node "${{ github.action_path }}/dist/cli.js" "${args[@]}"
+        # Record the exit code instead of failing here, so a SARIF report is still uploaded
+        # when the --fail-on gate trips; the last step re-applies it.
+        set +e
+        if [ "$SCAN_FORMAT" = "sarif" ]; then
+          node "${{ github.action_path }}/dist/cli.js" "${args[@]}" > "$SARIF_FILE"
+          code=$?
+          echo "sarif-file=$SARIF_FILE" >> "$GITHUB_OUTPUT"
+          echo "SARIF report written to $SARIF_FILE"
+        else
+          node "${{ github.action_path }}/dist/cli.js" "${args[@]}"
+          code=$?
+        fi
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to Code Scanning
+      if: inputs.format == 'sarif' && inputs.upload-sarif == 'true' && (steps.scan.outputs.exit-code == '0' || steps.scan.outputs.exit-code == '1')
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: build-scanner
+
+    - name: Apply fail-on gate
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+      run: exit "$EXIT_CODE"

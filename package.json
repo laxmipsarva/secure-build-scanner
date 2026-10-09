@@ -1,7 +1,7 @@
 {
   "name": "build-scanner",
   "version": "0.1.0",
-  "description": "Static scanner for SQL/NoSQL injection, GraphQL, CORS, CSP, and CSRF vulnerabilities in a local build/source folder",
+  "description": "Zero-config static scanner for missing security controls (rate limiting, CAPTCHA, CSRF, bot filtering) and injection, CORS, CSP, GraphQL, and API flaws in Express, Next.js, and Vite apps",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,7 +27,13 @@
     "graphql",
     "cors",
     "csp",
-    "csrf"
+    "csrf",
+    "rate-limiting",
+    "bot-protection",
+    "user-agent",
+    "nextjs",
+    "express",
+    "sarif"
   ],
   "license": "MIT",
   "dependencies": {
